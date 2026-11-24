@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VibeTube</title>
+<style>
+:root{--bg:#0e0e14;--card:#1a1a26;--acc:#ff3d71;--tx:#f2f2f7;--mu:#9a9ab0}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--tx);font-family:system-ui,sans-serif;padding-bottom:150px}
+header{position:sticky;top:0;z-index:20;background:#0e0e14ee;backdrop-filter:blur(8px);padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.logo{font-weight:800;font-size:1.3rem;color:var(--acc)}
+#q{flex:1;min-width:160px;padding:11px 14px;border-radius:24px;border:1px solid #333;background:var(--card);color:var(--tx);font-size:1rem}
+button{cursor:pointer;border:0;border-radius:20px;padding:10px 16px;background:var(--card);color:var(--tx);font-size:.95rem}
+button:hover,button:focus-visible,.card:focus-visible{outline:2px solid var(--acc)}
+button.on,.go{background:var(--acc)}
+nav{display:flex;gap:8px;padding:6px 14px;overflow-x:auto}
+nav button{white-space:nowrap}
+main{padding:10px 14px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px}
+h2{margin:14px 0 8px;font-size:1.1rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.card{background:var(--card);border-radius:12px;overflow:hidden;cursor:pointer}
+.card img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block}
+.card div{padding:8px 10px;font-size:.88rem}
+.card small{color:var(--mu);display:block;margin-top:3px}
+.card .row{display:flex;gap:6px;padding:0 10px 10px}
+.card .row button{padding:5px 10px;font-size:.8rem}
+#bar{position:fixed;left:0;right:0;bottom:0;background:#14141e;border-top:1px solid #2a2a3a;z-index:30;display:none;padding:8px 12px}
+#bar.show{display:flex;gap:12px;align-items:center}
+#pbox{width:150px;aspect-ratio:16/9;background:#000;border-radius:8px;overflow:hidden;flex:none}
+#pbox.big{position:fixed;inset:60px 0 auto 0;width:min(100%,900px);margin:auto;z-index:40;aspect-ratio:16/9;height:auto}
+#pbox iframe{width:100%;height:100%}
+#info{flex:1;min-width:0}
+#ptitle{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#shorts{height:calc(100vh - 150px);overflow-y:scroll;scroll-snap-type:y mandatory;max-width:420px;margin:auto}
+.sh{height:calc(100vh - 150px);scroll-snap-align:start;background:#000;border-radius:14px;margin-bottom:8px;position:relative}
+.sh iframe,.sh img{width:100%;height:100%;border:0;object-fit:cover}
+.sh p{position:absolute;bottom:10px;left:10px;right:10px;text-shadow:0 0 6px #000;font-size:.9rem;pointer-events:none}
+#msgs{height:50vh;overflow-y:auto;background:var(--card);border-radius:12px;padding:10px;margin:10px 0}
+.m{margin:6px 0}.m b{color:var(--acc)}
+.msg{display:flex;gap:8px}.msg input{flex:1;padding:11px;border-radius:20px;border:1px solid #333;background:var(--card);color:var(--tx)}
+.note{color:var(--mu);font-size:.85rem;margin:8px 0}
+@media(min-width:1400px){body{font-size:1.2rem}.grid{grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}}
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">🎧 VibeTube</span>
+  <input id="q" list="sg" placeholder="Gaana, artist, movie, series search karo..." autocomplete="off">
+  <datalist id="sg"></datalist>
+  <button class="go" id="goBtn">Search</button>
+</header>
+<nav id="nav"></nav>
+<main id="main"></main>
+
+<div id="bar">
+  <div id="pbox"><div id="yt"></div></div>
+  <div id="info"><div id="ptitle"></div><small id="pch" style="color:var(--mu)"></small></div>
+  <button id="prev">⏮</button><button id="pp">⏯</button><button id="next">⏭</button>
+  <button id="vid">🎬 Video</button><button id="fav">♡</button>
+</div>
+
+<script>
+/* ========= YAHAN APNI YOUTUBE API KEY PASTE KARO ========= */
+const API_KEY = "AIzaSyDwPZLNQybgk5vhONtQPawHvPHJ9zQBZbo";
+/* Chat server (optional): "wss://tera-server.com" . Khali chhodo to sirf same-browser chat chalega */
+const CHAT_WS_URL = "";
+/* ========================================================= */
+
+const $ = s => document.querySelector(s);
+const LS = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } };
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} };
+let favs = LS("favs", []), hist = LS("hist", []), queue = [], idx = -1, player, tab = "home", mode = "music";
+
+const MOODS = {"😊 Happy":"happy bollywood songs","😢 Sad":"sad hindi songs","❤️ Romantic":"romantic hindi songs","🔥 Party":"party songs hindi","😌 Chill":"lofi chill songs","💪 Gym":"gym workout songs","🌧️ Baarish":"rain songs hindi","🚗 Road Trip":"road trip songs hindi","🎤 Punjabi":"punjabi hit songs","🕉️ Bhakti":"bhakti songs"};
+const TABS = [["home","🏠 Home"],["music","🎵 Gaane"],["video","📺 Videos"],["shorts","📱 Shorts"],["movies","🎬 Movies"],["series","📡 Series"],["chat","💬 Chat"],["lib","⭐ Saved"]];
+$("#nav").innerHTML = TABS.map(([k,l]) => `<button data-t="${k}">${l}</button>`).join("");
+$("#nav").onclick = e => { const t = e.target.dataset.t; if (t) go(t) };
+
+async function yt(params) {
+  if (API_KEY.startsWith("YAHAN")) throw new Error("Code ke upar API_KEY mein apni YouTube API key paste karo.");
+  const u = new URLSearchParams({part:"snippet",type:"video",maxResults:20,key:API_KEY,...params});
+  const ck = "c:" + u.toString().replace(API_KEY,"");
+  const c = LS(ck, null); if (c && Date.now() - c.t < 36e5) return c.d;
+  const r = await fetch("https://www.googleapis.com/youtube/v3/search?" + u);
+  const j = await r.json(); if (j.error) throw new Error(j.error.message);
+  const d = j.items.map(i => ({id:i.id.videoId,title:dec(i.snippet.title),ch:i.snippet.channelTitle,th:i.snippet.thumbnails.medium.url}));
+  save(ck, {t:Date.now(), d}); return d;
+}
+const dec = s => { const t = document.createElement("textarea"); t.innerHTML = s; return t.value };
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function cards(list) {
+  window._l = list;
+  return `<div class="grid">` + list.map((v,i) => `<div class="card" tabindex="0" data-i="${i}"><img loading="lazy" src="${v.th}"><div>${esc(v.title)}<small>${esc(v.ch)}</small></div></div>`).join("") + `</div>`;
+}
+function wire(list, m) {
+  document.querySelectorAll(".card").forEach(c => {
+    const act = () => { queue = list; mode = m; play(+c.dataset.i) };
+    c.onclick = act; c.onkeydown = e => e.key === "Enter" && act();
+  });
+}
+async function show(title, params, m = "music") {
+  $("#main").insertAdjacentHTML("beforeend", `<h2>${title}</h2><div class="res">Loading...</div>`);
+  const box = [...document.querySelectorAll(".res")].pop();
+  try { const l = await yt(params); box.outerHTML = cards(l); wire(l, m); }
+  catch (e) { box.outerHTML = `<p class="note">⚠️ ${esc(e.message)}</p>` }
+}
+function moodChips() {
+  return `<div class="chips">` + Object.keys(MOODS).map(k => `<button data-mood="${k}">${k}</button>`).join("") + `</div>`;
+}
+$("#main").addEventListener("click", e => {
+  const k = e.target.dataset.mood;
+  if (k) { $("#main").innerHTML = `<h2>Mood: ${k}</h2>${moodChips()}`; show("Tumhare liye", {q:MOODS[k],videoCategoryId:10}); }
+});
+
+function go(t, q) {
+  tab = t; document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
+  const m = $("#main"); m.innerHTML = "";
+  if (t === "home") {
+    m.innerHTML = `<h2>Apna mood chuno</h2>` + moodChips();
+    show("🔥 Trending Hindi Songs", {q:"new hindi songs 2026",videoCategoryId:10});
+    if (hist.length) show("🎯 Tumhare liye (history se)", {q:hist[0].ch + " songs",videoCategoryId:10});
+  }
+  if (t === "music") { m.innerHTML = moodChips(); show(q ? `"${esc(q)}"` : "Top Gaane", {q:q || "top hindi songs",videoCategoryId:10}); }
+  if (t === "video") show(q ? `"${esc(q)}"` : "Video Songs", {q:(q || "hindi") + " official video song"}, "video");
+  if (t === "movies") show("Official Full Movies", {q:(q || "hindi") + " full movie official",videoDuration:"long"}, "video");
+  if (t === "series") show("Web Series / Episodes", {q:(q || "hindi") + " web series full episode",videoDuration:"long"}, "video");
+  if (t === "shorts") shorts(q);
+  if (t === "chat") chat();
+  if (t === "lib") lib();
+}
+function lib() {
+  const m = $("#main");
+  m.innerHTML = `<h2>⭐ Saved (Offline library)</h2><p class="note">YouTube ke rules ki wajah se file download nahi hoti; gaane yahan save rehte hain aur ek click mein chalte hain. History neeche hai.</p>`;
+  m.insertAdjacentHTML("beforeend", favs.length ? cards(favs) : `<p class="note">Abhi kuch saved nahi. Player mein ♡ dabao.</p>`); wire(favs, "music");
+  if (hist.length) { m.insertAdjacentHTML("beforeend", `<h2>🕘 History</h2>`); const h = document.createElement("div"); h.innerHTML = cards(hist); m.append(h); const hs = hist; h.querySelectorAll(".card").forEach(c => c.onclick = () => { queue = hs; play(+c.dataset.i) }); }
+}
+
+/* ===== Player ===== */
+const tag = document.createElement("script"); tag.src = "https://www.youtube.com/iframe_api"; document.head.append(tag);
+window.onYouTubeIframeAPIReady = () => { player = new YT.Player("yt", {width:"100%",height:"100%",playerVars:{playsinline:1,autoplay:1,rel:0},events:{onStateChange:e => { if (e.data === 0) nxt() }}}) };
+function play(i) {
+  if (!player || !player.loadVideoById) return alert("Player load ho raha hai, 2 second baad try karo.");
+  idx = i; const v = queue[i]; if (!v) return;
+  player.loadVideoById(v.id); $("#bar").classList.add("show");
+  $("#ptitle").textContent = v.title; $("#pch").textContent = v.ch; $("#fav").textContent = favs.some(f => f.id === v.id) ? "♥" : "♡";
+  $("#pbox").classList.toggle("big", mode === "video"); $("#vid").textContent = mode === "video" ? "🎵 Mini" : "🎬 Video";
+  hist = [v, ...hist.filter(h => h.id !== v.id)].slice(0, 30); save("hist", hist);
+  if ("mediaSession" in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({title:v.title,artist:v.ch,artwork:[{src:v.th,sizes:"320x180",type:"image/jpeg"}]});
+    navigator.mediaSession.setActionHandler("play", () => player.playVideo());
+    navigator.mediaSession.setActionHandler("pause", () => player.pauseVideo());
+    navigator.mediaSession.setActionHandler("nexttrack", nxt);
+    navigator.mediaSession.setActionHandler("previoustrack", prv);
+  }
+  if (i >= queue.length - 3 && mode === "music") suggest(v);
+}
+async function suggest(v) { /* similar gaane auto-add */
+  try { const more = await yt({q:v.ch + " " + v.title.split(/[-|(]/)[0] + " similar songs",videoCategoryId:10});
+    queue = [...queue, ...more.filter(x => !queue.some(q => q.id === x.id))]; } catch {}
+}
+const nxt = () => idx + 1 < queue.length && play(idx + 1), prv = () => idx > 0 && play(idx - 1);
+$("#next").onclick = nxt; $("#prev").onclick = prv;
+$("#pp").onclick = () => player.getPlayerState() === 1 ? player.pauseVideo() : player.playVideo();
+$("#vid").onclick = () => { mode = mode === "video" ? "music" : "video"; $("#pbox").classList.toggle("big", mode === "video"); $("#vid").textContent = mode === "video" ? "🎵 Mini" : "🎬 Video"; };
+$("#fav").onclick = () => { const v = queue[idx]; if (!v) return; favs = favs.some(f => f.id === v.id) ? favs.filter(f => f.id !== v.id) : [v, ...favs]; save("favs", favs); $("#fav").textContent = favs.some(f => f.id === v.id) ? "♥" : "♡"; };
+
+/* ===== Search + suggestions ===== */
+function doSearch() { const q = $("#q").value.trim(); if (!q) return; save("sq", [q, ...LS("sq", []).filter(x => x !== q)].slice(0, 15)); go(["music","video","movies","series","shorts"].includes(tab) ? tab : "music", q); }
+$("#goBtn").onclick = doSearch; $("#q").onkeydown = e => e.key === "Enter" && doSearch();
+$("#q").oninput = () => { const v = $("#q").value.toLowerCase(); $("#sg").innerHTML = LS("sq", []).filter(s => s.toLowerCase().includes(v)).map(s => `<option value="${esc(s)}">`).join(""); };
+
+/* ===== Shorts ===== */
+async function shorts(q) {
+  const m = $("#main"); m.innerHTML = `<div id="shorts">Loading...</div>`;
+  try {
+    const l = await yt({q:(q || "funny") + " #shorts",videoDuration:"short",maxResults:25});
+    $("#shorts").innerHTML = l.map(v => `<div class="sh" data-id="${v.id}"><img src="${v.th}"><p>${esc(v.title)}</p></div>`).join("");
+    const io = new IntersectionObserver(es => es.forEach(e => {
+      const d = e.target; if (e.isIntersecting) { d.innerHTML = `<iframe src="https://www.youtube.com/embed/${d.dataset.id}?autoplay=1&mute=1&loop=1&playlist=${d.dataset.id}&playsinline=1" allow="autoplay;encrypted-media" allowfullscreen></iframe>`; }
+      else d.innerHTML = `<img src="https://i.ytimg.com/vi/${d.dataset.id}/mqdefault.jpg">`;
+    }), {root:$("#shorts"),threshold:.7});
+    document.querySelectorAll(".sh").forEach(s => io.observe(s));
+  } catch (e) { m.innerHTML = `<p class="note">⚠️ ${esc(e.message)}</p>` }
+}
+
+/* ===== Chat (no login, sirf nickname) ===== */
+let ws, bc;
+function chat() {
+  const nick = LS("nick", "") || prompt("Apna nickname likho:") || "Guest" + Math.floor(Math.random() * 99); save("nick", nick);
+  $("#main").innerHTML = `<h2>💬 Chat</h2><div class="msg"><input id="room" value="${LS("room", "dost")}" placeholder="Room naam"><button id="join">Join</button></div>
+  <p class="note">Dost ko same room naam batao. ${CHAT_WS_URL ? "Server connected." : "Abhi sirf same browser ke tabs mein chalega; CHAT_WS_URL set karo real chat ke liye."}</p>
+  <div id="msgs"></div><div class="msg"><input id="mi" placeholder="Message likho..."><button class="go" id="snd">Send</button></div>`;
+  const add = d => { const b = $("#msgs"); b.insertAdjacentHTML("beforeend", `<div class="m"><b>${esc(d.n)}:</b> ${esc(d.t)}</div>`); b.scrollTop = b.scrollHeight; };
+  const join = () => {
+    const room = $("#room").value.trim() || "dost"; save("room", room);
+    bc && bc.close(); bc = new BroadcastChannel("vt-" + room); bc.onmessage = e => add(e.data);
+    ws && ws.close(); if (CHAT_WS_URL) { try { ws = new WebSocket(CHAT_WS_URL + "/?room=" + encodeURIComponent(room)); ws.onmessage = e => add(JSON.parse(e.data)); } catch {} }
+    $("#msgs").innerHTML = ""; add({n:"System",t:"Room '" + room + "' mein ho."});
+  };
+  const send = () => { const t = $("#mi").value.trim(); if (!t) return; const d = {n:nick,t}; add(d); bc.postMessage(d); ws && ws.readyState === 1 && ws.send(JSON.stringify(d)); $("#mi").value = ""; };
+  $("#join").onclick = join; $("#snd").onclick = send; $("#mi").onkeydown = e => e.key === "Enter" && send(); join();
+}
+
+go("home");
+</script>
+</body>
+</html>
